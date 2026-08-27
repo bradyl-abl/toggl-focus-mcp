@@ -87,6 +87,18 @@ def test_time_entries_reports_the_total():
     assert "Total: 1h 0m" in format_time_entries(entries)
 
 
+def test_time_entries_warns_when_the_list_was_truncated():
+    entries = [{"description": "a", "planned_start": "2026-08-26T17:00:00Z", "planned_duration": 1800}]
+    result = format_time_entries(entries, truncated=True)
+    assert "incomplete" in result
+    assert "Total: 30m 0s" in result
+
+
+def test_time_entries_stays_quiet_when_the_list_is_complete():
+    entries = [{"description": "a", "planned_start": "2026-08-26T17:00:00Z", "planned_duration": 1800}]
+    assert "incomplete" not in format_time_entries(entries)
+
+
 def test_stopped_timer_when_nothing_ran():
     assert format_stopped_timer(None) == "No timer was running."
 

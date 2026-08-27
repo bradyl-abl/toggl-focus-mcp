@@ -41,5 +41,5 @@ def register_tools(mcp: MCPServer, client: FocusClient) -> None:
             return "days must be zero or greater."
         date_to = datetime.now(timezone.utc)
         date_from = date_to - timedelta(days=days)
-        entries = await client.list_time_entries(date_from, date_to)
-        return format_time_entries(entries)
+        entries, truncated = await client.list_time_entries(date_from, date_to)
+        return format_time_entries(entries, truncated=truncated)

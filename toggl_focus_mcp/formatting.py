@@ -65,7 +65,7 @@ def format_stopped_timer(entry: dict | None) -> str:
     return f"Stopped: {_describe(entry)}\nDuration: {format_duration(duration)}"
 
 
-def format_time_entries(entries: list[dict]) -> str:
+def format_time_entries(entries: list[dict], truncated: bool = False) -> str:
     if not entries:
         return "No time entries in that period."
 
@@ -86,4 +86,11 @@ def format_time_entries(entries: list[dict]) -> str:
 
     count = len(entries)
     header = f"{count} time entry" if count == 1 else f"{count} time entries"
-    return f"{header}\n" + "\n".join(lines) + f"\n\nTotal: {format_duration(total)}"
+    body = f"{header}\n" + "\n".join(lines) + f"\n\nTotal: {format_duration(total)}"
+    if truncated:
+        body += (
+            "\n\nWarning: this list is incomplete. Paging stopped at the page "
+            "limit, so there are more entries in this period and the total "
+            "above undercounts it. Ask for a shorter window."
+        )
+    return body

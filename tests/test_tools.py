@@ -3,16 +3,18 @@ from datetime import datetime, timezone
 import pytest
 from mcp.server.mcpserver import MCPServer
 
+from toggl_focus_mcp.client import TimeEntryResult
 from toggl_focus_mcp.tools import register_tools
 
 
 class FakeClient:
     """Stands in for FocusClient. Records calls, returns canned payloads."""
 
-    def __init__(self, current=None, entries=None, stopped=None):
+    def __init__(self, current=None, entries=None, stopped=None, truncated=False):
         self._current = current
         self._entries = entries or []
         self._stopped = stopped
+        self._truncated = truncated
         self.started = None
         self.entry_window = None
 
@@ -28,7 +30,7 @@ class FakeClient:
 
     async def list_time_entries(self, date_from, date_to, per_page=50):
         self.entry_window = (date_from, date_to)
-        return self._entries
+        return TimeEntryResult(self._entries, self._truncated)
 
 
 async def call(mcp: MCPServer, name: str, args: dict) -> str:
@@ -112,3 +114,12 @@ async def test_get_time_entries_allows_zero_days(server_and_client):
     result = await call(mcp, "get_time_entries", {"days": 0})
     assert client.entry_window is not None
     assert "No time entries in that period." in result
+
+
+async def test_get_time_entries_warns_when_truncated(server_and_client):
+    mcp, _ = server_and_client(
+        entries=[{"description": "standup", "planned_start": "2026-08-26T17:00:00Z",
+                  "planned_duration": 1800}],
+        truncated=True,
+    )
+    assert "incomplete" in await call(mcp, "get_time_entries", {"days": 30})

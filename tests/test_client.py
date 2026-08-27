@@ -5,7 +5,7 @@ import httpx
 import pytest
 import respx
 
-from toggl_focus_mcp.client import FocusAPIError, FocusClient, to_rfc3339
+from toggl_focus_mcp.client import MAX_PAGES, FocusAPIError, FocusClient, to_rfc3339
 from toggl_focus_mcp.config import Config
 
 CONFIG = Config(
@@ -88,6 +88,9 @@ async def test_403_reports_permissions():
         with pytest.raises(FocusAPIError) as exc:
             await make_client(http).request("GET", "/tracking/current")
     assert exc.value.status == 403
+    message = str(exc.value)
+    assert "permission" in message
+    assert "TOGGL_ORG_ID" in message
 
 
 @respx.mock
@@ -179,10 +182,57 @@ async def test_list_time_entries_unwraps_the_data_page():
         )
     )
     async with httpx.AsyncClient() as http:
-        entries = await make_client(http).list_time_entries(
+        entries, truncated = await make_client(http).list_time_entries(
             datetime(2026, 7, 28), datetime(2026, 8, 27)
         )
     assert [e["id"] for e in entries] == [1, 2]
+    assert truncated is False
+
+
+@respx.mock
+async def test_list_time_entries_stops_after_one_short_page():
+    """A page smaller than per_page is the last one. Do not ask for another."""
+    route = respx.get(f"{SCOPE}/time-entries").mock(
+        return_value=httpx.Response(200, json={"page": 1, "per_page": 2, "data": [{"id": 1}]})
+    )
+    async with httpx.AsyncClient() as http:
+        await make_client(http).list_time_entries(
+            datetime(2026, 7, 28), datetime(2026, 8, 27), per_page=2
+        )
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_list_time_entries_walks_every_page():
+    pages = [
+        httpx.Response(200, json={"page": 1, "per_page": 2, "data": [{"id": 1}, {"id": 2}]}),
+        httpx.Response(200, json={"page": 2, "per_page": 2, "data": [{"id": 3}, {"id": 4}]}),
+        httpx.Response(200, json={"page": 3, "per_page": 2, "data": [{"id": 5}]}),
+    ]
+    route = respx.get(f"{SCOPE}/time-entries").mock(side_effect=pages)
+    async with httpx.AsyncClient() as http:
+        entries, truncated = await make_client(http).list_time_entries(
+            datetime(2026, 7, 28), datetime(2026, 8, 27), per_page=2
+        )
+    assert [e["id"] for e in entries] == [1, 2, 3, 4, 5]
+    assert truncated is False
+    assert route.call_count == 3
+    assert [call.request.url.params["page"] for call in route.calls] == ["1", "2", "3"]
+
+
+@respx.mock
+async def test_list_time_entries_flags_truncation_at_the_page_cap():
+    """A full page every time means more entries exist. Say so, do not loop."""
+    route = respx.get(f"{SCOPE}/time-entries").mock(
+        return_value=httpx.Response(200, json={"page": 1, "per_page": 2, "data": [{"id": 1}, {"id": 2}]})
+    )
+    async with httpx.AsyncClient() as http:
+        entries, truncated = await make_client(http).list_time_entries(
+            datetime(2026, 7, 28), datetime(2026, 8, 27), per_page=2
+        )
+    assert truncated is True
+    assert route.call_count == MAX_PAGES
+    assert len(entries) == MAX_PAGES * 2
 
 
 @respx.mock

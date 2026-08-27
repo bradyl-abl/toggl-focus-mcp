@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 
@@ -13,6 +13,24 @@ REVOKED_KEY_HINT = (
     "The API key was rejected. Note that Toggl allows one active key per user, "
     "so creating a new key revokes the previous one."
 )
+
+FORBIDDEN_HINT = (
+    "The API key was accepted but is not allowed to do this. Either the key "
+    "lacks permission for this workspace, or TOGGL_ORG_ID is wrong. Check both "
+    "against the Toggl 2.0 URL: "
+    "https://focus.toggl.com/{organization_id}/workspaces/{workspace_id}/calendar"
+)
+
+# Stop paging after this many requests. A 30 day window at 50 entries a page
+# fits well inside it, and the cap keeps a misbehaving API from looping forever.
+MAX_PAGES = 20
+
+
+class TimeEntryResult(NamedTuple):
+    """Entries plus whether paging stopped at the cap before running out."""
+
+    entries: list[dict]
+    truncated: bool
 
 
 class FocusAPIError(Exception):
@@ -97,19 +115,33 @@ class FocusClient:
         date_from: datetime,
         date_to: datetime,
         per_page: int = 50,
-    ) -> list[dict]:
-        """Entries in a window. Both bounds are required by the API."""
-        page = await self.request(
-            "GET",
-            "/time-entries",
-            params={
-                "date_from": to_rfc3339(date_from),
-                "date_to": to_rfc3339(date_to),
-                "per_page": per_page,
-                "include_taskless": "true",
-            },
-        )
-        return (page or {}).get("data", [])
+    ) -> TimeEntryResult:
+        """Every entry in a window. Both bounds are required by the API.
+
+        Walks pages until one comes back short, so a busy month does not get
+        silently cut to the first page. Gives up at MAX_PAGES and flags the
+        result as truncated, so the caller can say the list is incomplete
+        rather than presenting a partial total as the whole period.
+        """
+        per_page = max(1, per_page)
+        entries: list[dict] = []
+        for page_number in range(1, MAX_PAGES + 1):
+            page = await self.request(
+                "GET",
+                "/time-entries",
+                params={
+                    "date_from": to_rfc3339(date_from),
+                    "date_to": to_rfc3339(date_to),
+                    "page": page_number,
+                    "per_page": per_page,
+                    "include_taskless": "true",
+                },
+            )
+            batch = (page or {}).get("data") or []
+            entries.extend(batch)
+            if len(batch) < per_page:
+                return TimeEntryResult(entries, False)
+        return TimeEntryResult(entries, True)
 
     async def resolve_workspace_id(self) -> str:
         """Look up the default workspace when none is configured."""
@@ -131,6 +163,8 @@ class FocusClient:
     def _error_message(response: httpx.Response) -> str:
         if response.status_code == 401:
             return REVOKED_KEY_HINT
+        if response.status_code == 403:
+            return FORBIDDEN_HINT
         try:
             body = response.json()
         except ValueError:
