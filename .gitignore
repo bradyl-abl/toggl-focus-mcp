@@ -9,3 +9,6 @@ venv/
 dist/
 build/
 .DS_Store
+
+# Local session notes, not for the public repo
+SESSION-STATE.local.md
