@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
 from toggl_focus_mcp.formatting import (
+    _parse,
     format_current_timer,
     format_duration,
+    format_started_timer,
     format_stopped_timer,
     format_time_entries,
 )
@@ -91,6 +93,65 @@ def test_stopped_timer_when_nothing_ran():
 
 def test_stopped_timer_reports_duration():
     assert "30m 0s" in format_stopped_timer({"description": "writing", "duration": 1800})
+
+
+def test_stopped_timer_without_duration_reports_unknown():
+    """A missing duration field is not a zero-length timer."""
+    result = format_stopped_timer({"description": "writing"})
+    assert "writing" in result
+    assert "unknown" in result.lower()
+    assert "0s" not in result
+
+
+def test_stopped_timer_with_zero_duration_still_prints_zero():
+    """A duration that is genuinely zero must render as 0s, not as unknown."""
+    result = format_stopped_timer({"description": "writing", "duration": 0})
+    assert "Duration: 0s" in result
+    assert "unknown" not in result.lower()
+
+
+def test_stopped_timer_without_description():
+    assert "(no description)" in format_stopped_timer({"duration": 1800})
+
+
+def test_started_timer_reports_description():
+    assert format_started_timer({"id": 1, "description": "writing docs"}) == "Started: writing docs"
+
+
+def test_started_timer_without_description_uses_the_placeholder():
+    assert "(no description)" in format_started_timer({"id": 1, "description": ""})
+
+
+def test_started_timer_handles_a_bodyless_response():
+    """A 204 leaves the client with None. Say something rather than crashing."""
+    result = format_started_timer(None)
+    assert "started" in result.lower()
+
+
+def test_parse_tags_a_naive_timestamp_as_utc():
+    """Deterministic guard: the day tests above are silent on a UTC host."""
+    assert _parse("2026-08-26T23:30:00") == datetime(2026, 8, 26, 23, 30, tzinfo=timezone.utc)
+
+
+def test_parse_keeps_an_explicit_offset():
+    assert _parse("2026-08-26T23:30:00Z") == datetime(2026, 8, 26, 23, 30, tzinfo=timezone.utc)
+
+
+def test_naive_start_is_read_as_utc_not_local_time():
+    """A start with no offset must not break the elapsed subtraction."""
+    entry = {"description": "writing docs", "start": "2026-08-27T11:30:00"}
+    result = format_current_timer(entry, NOW)
+    assert "30m 0s" in result
+
+
+def test_naive_timestamp_in_time_entries_renders_the_utc_day():
+    """A naive planned_start must not shift the day to the host timezone."""
+    entry = {
+        "description": "late night",
+        "planned_start": "2026-08-26T23:30:00",
+        "planned_duration": 1800,
+    }
+    assert "2026-08-26" in format_time_entries([entry])
 
 
 def test_planned_duration_zero_preferred_over_tracked():

@@ -19,8 +19,17 @@ def format_duration(seconds: int) -> str:
 
 
 def _parse(value: str) -> datetime:
-    """Parse an API timestamp. Handles the Z suffix and fractional seconds."""
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    """Parse an API timestamp into an aware datetime.
+
+    Handles the Z suffix and fractional seconds. A value with no offset is
+    read as UTC, matching what client.to_rfc3339 does on the way out. Without
+    that, a naive timestamp breaks the elapsed-time subtraction and shifts the
+    rendered day to whatever timezone the host machine happens to run in.
+    """
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _describe(entry: dict) -> str:
@@ -38,12 +47,21 @@ def format_current_timer(entry: dict | None, now: datetime) -> str:
     return f"Running: {_describe(entry)}\nElapsed: {format_duration(elapsed)}"
 
 
+def format_started_timer(entry: dict | None) -> str:
+    """Report a timer the API just started."""
+    if entry is None:
+        return "Timer started. The API reported no details about it."
+    return f"Started: {_describe(entry)}"
+
+
 def format_stopped_timer(entry: dict | None) -> str:
     if entry is None:
         return "No timer was running."
     duration = entry.get("duration")
     if duration is None:
-        duration = 0
+        # A missing field is not a zero-length timer. Say so, the same way the
+        # current-timer path does when start is absent.
+        return f"Stopped: {_describe(entry)}\nDuration: unknown (no duration reported)"
     return f"Stopped: {_describe(entry)}\nDuration: {format_duration(duration)}"
 
 
