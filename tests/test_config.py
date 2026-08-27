@@ -55,13 +55,23 @@ def test_missing_org_id_explains_where_to_find_it():
 def test_track_v9_token_is_rejected_with_a_pointer_to_the_other_server():
     with pytest.raises(ConfigError) as exc:
         load_config({
-            "TOGGL_API_KEY": "1971800d4d82861d8f2c1651fea4d212",
+            "TOGGL_API_KEY": "00000000000000000000000000000000",
             "TOGGL_ORG_ID": "1",
         })
     message = str(exc.value)
     assert "Track v9" in message
     assert "toggl_sk_" in message
     assert "vontell/toggl-track-mcp" in message
+
+
+def test_uppercase_track_v9_token_is_also_recognised():
+    """A pasted uppercase 32-hex token is still a Track v9 token."""
+    with pytest.raises(ConfigError) as exc:
+        load_config({
+            "TOGGL_API_KEY": "ABCDEF0123456789ABCDEF0123456789",
+            "TOGGL_ORG_ID": "1",
+        })
+    assert "Track v9" in str(exc.value)
 
 
 def test_unrecognised_key_format_is_rejected():

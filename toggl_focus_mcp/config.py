@@ -8,8 +8,10 @@ from typing import Mapping
 
 DEFAULT_API_BASE = "https://focus.toggl.com/api"
 
-# A Toggl Track v9 token: 32 hex characters, no prefix.
-TRACK_V9_TOKEN = re.compile(r"^[0-9a-f]{32}$")
+# A Toggl Track v9 token: 32 hex characters, no prefix. Toggl renders these in
+# lowercase, but match either case so a pasted uppercase token still gets the
+# helpful message instead of the generic "does not look like a key" one.
+TRACK_V9_TOKEN = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
 
 # A Toggl 2.0 key.
 FOCUS_KEY_PREFIX = "toggl_sk_"
