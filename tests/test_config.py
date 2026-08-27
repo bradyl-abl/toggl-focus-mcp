@@ -8,14 +8,14 @@ VALID_KEY = "toggl_sk_" + "a" * 32
 def test_loads_all_values():
     cfg = load_config({
         "TOGGL_API_KEY": VALID_KEY,
-        "TOGGL_ORG_ID": "21631262",
-        "TOGGL_WORKSPACE_ID": "21630499",
+        "TOGGL_ORG_ID": "12345678",
+        "TOGGL_WORKSPACE_ID": "87654321",
         "TOGGL_API_BASE": "https://example.test/api",
     })
     assert cfg == Config(
         api_key=VALID_KEY,
-        org_id="21631262",
-        workspace_id="21630499",
+        org_id="12345678",
+        workspace_id="87654321",
         api_base="https://example.test/api",
     )
 
@@ -82,7 +82,7 @@ def test_unrecognised_key_format_is_rejected():
 def test_whitespace_is_stripped():
     cfg = load_config({
         "TOGGL_API_KEY": f"  {VALID_KEY}  ",
-        "TOGGL_ORG_ID": " 21631262 ",
+        "TOGGL_ORG_ID": " 12345678 ",
     })
     assert cfg.api_key == VALID_KEY
-    assert cfg.org_id == "21631262"
+    assert cfg.org_id == "12345678"

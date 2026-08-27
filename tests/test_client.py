@@ -10,12 +10,12 @@ from toggl_focus_mcp.config import Config
 
 CONFIG = Config(
     api_key="toggl_sk_" + "a" * 32,
-    org_id="21631262",
-    workspace_id="21630499",
+    org_id="12345678",
+    workspace_id="87654321",
     api_base="https://focus.toggl.com/api",
 )
 
-SCOPE = "https://focus.toggl.com/api/organizations/21631262/workspaces/21630499"
+SCOPE = "https://focus.toggl.com/api/organizations/12345678/workspaces/87654321"
 
 
 def make_client(http: httpx.AsyncClient) -> FocusClient:
@@ -238,22 +238,22 @@ async def test_list_time_entries_flags_truncation_at_the_page_cap():
 @respx.mock
 async def test_resolve_workspace_id_reads_current_workspace():
     respx.get("https://focus.toggl.com/api/users/me/settings").mock(
-        return_value=httpx.Response(200, json={"current_workspace_id": 21630499})
+        return_value=httpx.Response(200, json={"current_workspace_id": 87654321})
     )
     async with httpx.AsyncClient() as http:
-        assert await make_client(http).resolve_workspace_id() == "21630499"
+        assert await make_client(http).resolve_workspace_id() == "87654321"
 
 
 @respx.mock
 async def test_request_resolves_workspace_when_not_configured():
     config = Config(
         api_key=CONFIG.api_key,
-        org_id="21631262",
+        org_id="12345678",
         workspace_id=None,
         api_base="https://focus.toggl.com/api",
     )
     respx.get("https://focus.toggl.com/api/users/me/settings").mock(
-        return_value=httpx.Response(200, json={"current_workspace_id": 21630499})
+        return_value=httpx.Response(200, json={"current_workspace_id": 87654321})
     )
     route = respx.get(f"{SCOPE}/tracking/current").mock(return_value=httpx.Response(204))
     async with httpx.AsyncClient() as http:
@@ -265,12 +265,12 @@ async def test_request_resolves_workspace_when_not_configured():
 async def test_workspace_is_resolved_only_once():
     config = Config(
         api_key=CONFIG.api_key,
-        org_id="21631262",
+        org_id="12345678",
         workspace_id=None,
         api_base="https://focus.toggl.com/api",
     )
     settings = respx.get("https://focus.toggl.com/api/users/me/settings").mock(
-        return_value=httpx.Response(200, json={"current_workspace_id": 21630499})
+        return_value=httpx.Response(200, json={"current_workspace_id": 87654321})
     )
     respx.get(f"{SCOPE}/tracking/current").mock(return_value=httpx.Response(204))
     async with httpx.AsyncClient() as http:
