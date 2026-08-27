@@ -4,16 +4,17 @@ Date: 2026-08-27
 
 ## Purpose
 
-An MCP server for Toggl 2.0, so Claude can read and control time tracking on
-accounts that use the Focus API.
+An MCP server for Toggl 2.0, so Claude can read and control time tracking
+through the Focus API.
 
-Toggl now runs two separate products with incompatible APIs. New signups land on
-Toggl 2.0. The existing community server, `vontell/toggl-track-mcp`, targets the
-legacy Toggl Track v9 API and cannot talk to a Toggl 2.0 account at all. This
-project fills that gap.
+Toggl runs two products with separate and incompatible APIs. Toggl 2.0 uses the
+Focus API at `focus.toggl.com`, authenticating with a Bearer key prefixed
+`toggl_sk_`. Toggl Track v9 uses `api.track.toggl.com`, authenticating with a
+32 character hex token sent as Basic auth. New signups land on Toggl 2.0.
 
-This is a clean-room implementation. No code is copied from
-`vontell/toggl-track-mcp`, which carries no license.
+This server targets Toggl 2.0 and nothing else. The two APIs differ in host,
+auth scheme, path structure, and payload shape, so one client serving both would
+be two clients wearing a single name.
 
 ## Verified API facts
 

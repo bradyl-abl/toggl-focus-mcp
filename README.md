@@ -5,18 +5,20 @@ Focus API at `https://focus.toggl.com/api`.
 
 ## Which Toggl this is for
 
-Toggl has two separate products with separate APIs: Toggl 2.0 (Focus) and
-Toggl Track v9. This server talks to Toggl 2.0 only.
+Toggl runs two products with separate APIs. This server talks to Toggl 2.0,
+through the Focus API.
 
-If you have a Toggl Track v9 account, your API token is 32 hex characters
-with no prefix, and it will not work here. Use
-[vontell/toggl-track-mcp](https://github.com/vontell/toggl-track-mcp)
-instead. If you point this server at a Track v9 token, it detects the
-mismatch at startup and tells you so instead of failing silently.
+Your key tells you which account you have. A Toggl 2.0 key starts with
+`toggl_sk_` and comes from your Toggl 2.0 settings. A Toggl Track v9 token is
+32 hex characters with no prefix and will not work here. Point this server at
+one and it says so at startup, rather than failing with a confusing 403 on
+every call.
 
-A Toggl 2.0 key starts with `toggl_sk_` and comes from your Toggl 2.0
-settings. Only one key is active per user at a time: creating a new key
-revokes whichever key was active before it.
+Only one Toggl 2.0 key is active per user at a time. Creating a new key revokes
+whichever key was active before it, which surprises people.
+
+For Toggl Track v9 accounts, [vontell/toggl-track-mcp](https://github.com/vontell/toggl-track-mcp)
+covers that API.
 
 ## Installation
 
