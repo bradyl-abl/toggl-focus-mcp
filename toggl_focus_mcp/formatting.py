@@ -30,7 +30,10 @@ def _describe(entry: dict) -> str:
 def format_current_timer(entry: dict | None, now: datetime) -> str:
     if entry is None:
         return "No timer is currently running."
-    started = _parse(entry["start"])
+    start = entry.get("start")
+    if start is None:
+        return f"Running: {_describe(entry)}\nElapsed: unknown (no start time reported)"
+    started = _parse(start)
     elapsed = int((now - started).total_seconds())
     return f"Running: {_describe(entry)}\nElapsed: {format_duration(elapsed)}"
 

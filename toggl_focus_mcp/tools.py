@@ -37,6 +37,8 @@ def register_tools(mcp: MCPServer, client: FocusClient) -> None:
     @mcp.tool()
     async def get_time_entries(days: int = 7) -> str:
         """List Toggl time entries from the last N days."""
+        if days < 0:
+            return "days must be zero or greater."
         date_to = datetime.now(timezone.utc)
         date_from = date_to - timedelta(days=days)
         entries = await client.list_time_entries(date_from, date_to)

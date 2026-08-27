@@ -42,6 +42,23 @@ def test_running_timer_without_description():
     assert "(no description)" in format_current_timer(entry, NOW)
 
 
+def test_running_timer_without_start_reports_unknown_elapsed():
+    """A running entry legally omits start per the Focus API schema. Must not raise."""
+    entry = {"description": "writing docs"}
+    result = format_current_timer(entry, NOW)
+    assert "writing docs" in result
+    assert "unknown" in result.lower()
+
+
+def test_running_timer_with_start_still_computes_elapsed():
+    """Regression guard: the start-present path must be unaffected by the .get() fix."""
+    entry = {"description": "writing docs", "start": "2026-08-27T11:30:00Z"}
+    result = format_current_timer(entry, NOW)
+    assert "writing docs" in result
+    assert "30m 0s" in result
+    assert "unknown" not in result.lower()
+
+
 def test_empty_time_entries():
     assert format_time_entries([]) == "No time entries in that period."
 

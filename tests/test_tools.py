@@ -98,3 +98,17 @@ async def test_get_time_entries_formats_results(server_and_client):
         {"description": "standup", "planned_start": "2026-08-26T17:00:00Z", "planned_duration": 1800}
     ])
     assert "standup" in await call(mcp, "get_time_entries", {"days": 7})
+
+
+async def test_get_time_entries_rejects_negative_days(server_and_client):
+    mcp, client = server_and_client(entries=[])
+    result = await call(mcp, "get_time_entries", {"days": -1})
+    assert "days must be zero or greater" in result
+    assert client.entry_window is None
+
+
+async def test_get_time_entries_allows_zero_days(server_and_client):
+    mcp, client = server_and_client(entries=[])
+    result = await call(mcp, "get_time_entries", {"days": 0})
+    assert client.entry_window is not None
+    assert "No time entries in that period." in result
