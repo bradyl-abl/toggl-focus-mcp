@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toggl-focus-mcp"
+version = "0.1.0"
+description = "An MCP server exposing Toggl 2.0 time tracking through the Focus API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "mcp[cli]>=2.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "respx>=0.21.0",
+]
+
+[project.scripts]
+toggl-focus-mcp = "toggl_focus_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/bradyl-abl/toggl-focus-mcp"
+
+[tool.setuptools]
+packages = ["toggl_focus_mcp"]

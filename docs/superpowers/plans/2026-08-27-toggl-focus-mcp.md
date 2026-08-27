@@ -82,14 +82,14 @@ VALID_KEY = "toggl_sk_" + "a" * 32
 def test_loads_all_values():
     cfg = load_config({
         "TOGGL_API_KEY": VALID_KEY,
-        "TOGGL_ORG_ID": "21631262",
-        "TOGGL_WORKSPACE_ID": "21630499",
+        "TOGGL_ORG_ID": "12345678",
+        "TOGGL_WORKSPACE_ID": "87654321",
         "TOGGL_API_BASE": "https://example.test/api",
     })
     assert cfg == Config(
         api_key=VALID_KEY,
-        org_id="21631262",
-        workspace_id="21630499",
+        org_id="12345678",
+        workspace_id="87654321",
         api_base="https://example.test/api",
     )
 
@@ -129,7 +129,7 @@ def test_missing_org_id_explains_where_to_find_it():
 def test_track_v9_token_is_rejected_with_a_pointer_to_the_other_server():
     with pytest.raises(ConfigError) as exc:
         load_config({
-            "TOGGL_API_KEY": "1971800d4d82861d8f2c1651fea4d212",
+            "TOGGL_API_KEY": "00000000000000000000000000000000",
             "TOGGL_ORG_ID": "1",
         })
     message = str(exc.value)
@@ -146,10 +146,10 @@ def test_unrecognised_key_format_is_rejected():
 def test_whitespace_is_stripped():
     cfg = load_config({
         "TOGGL_API_KEY": f"  {VALID_KEY}  ",
-        "TOGGL_ORG_ID": " 21631262 ",
+        "TOGGL_ORG_ID": " 12345678 ",
     })
     assert cfg.api_key == VALID_KEY
-    assert cfg.org_id == "21631262"
+    assert cfg.org_id == "12345678"
 ```
 
 - [ ] **Step 3: Run tests to verify they fail**
@@ -272,12 +272,12 @@ from toggl_focus_mcp.config import Config
 
 CONFIG = Config(
     api_key="toggl_sk_" + "a" * 32,
-    org_id="21631262",
-    workspace_id="21630499",
+    org_id="12345678",
+    workspace_id="87654321",
     api_base="https://focus.toggl.com/api",
 )
 
-SCOPE = "https://focus.toggl.com/api/organizations/21631262/workspaces/21630499"
+SCOPE = "https://focus.toggl.com/api/organizations/12345678/workspaces/87654321"
 
 
 def make_client(http: httpx.AsyncClient) -> FocusClient:
@@ -570,10 +570,10 @@ async def test_list_time_entries_unwraps_the_data_page():
 @respx.mock
 async def test_resolve_workspace_id_reads_current_workspace():
     respx.get("https://focus.toggl.com/api/users/me/settings").mock(
-        return_value=httpx.Response(200, json={"current_workspace_id": 21630499})
+        return_value=httpx.Response(200, json={"current_workspace_id": 87654321})
     )
     async with httpx.AsyncClient() as http:
-        assert await make_client(http).resolve_workspace_id() == "21630499"
+        assert await make_client(http).resolve_workspace_id() == "87654321"
 ```
 
 Add this helper near the top of the file, below `make_client`:
@@ -1141,7 +1141,7 @@ State plainly that this server does not work with Toggl Track v9 tokens, and tha
 This step needs real credentials and stays out of the automated suite.
 
 ```bash
-TOGGL_API_KEY=<real key> TOGGL_ORG_ID=21631262 TOGGL_WORKSPACE_ID=21630499 \
+TOGGL_API_KEY=<real key> TOGGL_ORG_ID=12345678 TOGGL_WORKSPACE_ID=87654321 \
   .venv/bin/python -c "
 import asyncio, os, httpx
 from toggl_focus_mcp.config import load_config
@@ -1167,7 +1167,7 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}' \
  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
- | TOGGL_API_KEY=<real key> TOGGL_ORG_ID=21631262 .venv/bin/python -m toggl_focus_mcp.server
+ | TOGGL_API_KEY=<real key> TOGGL_ORG_ID=12345678 .venv/bin/python -m toggl_focus_mcp.server
 ```
 
 Expected: the first stdout byte is `{`, and `tools/list` returns 4 tools.
