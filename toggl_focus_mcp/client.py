@@ -41,11 +41,18 @@ class FocusClient:
     def __init__(self, config: Config, http: httpx.AsyncClient) -> None:
         self._config = config
         self._http = http
+        self._workspace_id = config.workspace_id
 
     @property
     def scope(self) -> str:
         cfg = self._config
-        return f"{cfg.api_base}/organizations/{cfg.org_id}/workspaces/{cfg.workspace_id}"
+        return f"{cfg.api_base}/organizations/{cfg.org_id}/workspaces/{self._workspace_id}"
+
+    async def _scoped_url(self, path: str) -> str:
+        """Resolve the workspace on first use, then build the URL."""
+        if self._workspace_id is None:
+            self._workspace_id = await self.resolve_workspace_id()
+        return f"{self.scope}{path}"
 
     async def request(
         self,
@@ -58,12 +65,60 @@ class FocusClient:
         """Call a workspace-scoped endpoint. Returns None for 204."""
         response = await self._http.request(
             method,
-            f"{self.scope}{path}",
+            await self._scoped_url(path),
             params=params,
             json=json,
             headers={"Authorization": f"Bearer {self._config.api_key}"},
         )
         return self._handle(response)
+
+    async def get_current_timer(self) -> dict | None:
+        """The running entry, or None when nothing is being tracked."""
+        return await self.request("GET", "/tracking/current")
+
+    async def start_timer(self, description: str, project_id: int | None = None) -> dict:
+        """Start tracking. Any running entry is stopped by the API first."""
+        payload: dict = {"type": "activity", "description": description}
+        if project_id is not None:
+            payload["project_id"] = project_id
+        return await self.request("POST", "/tracking/start", json=payload)
+
+    async def stop_timer(self) -> dict | None:
+        """Stop tracking. Returns None when nothing was running."""
+        try:
+            return await self.request("POST", "/tracking/stop")
+        except FocusAPIError as error:
+            if error.status == 404:
+                return None
+            raise
+
+    async def list_time_entries(
+        self,
+        date_from: datetime,
+        date_to: datetime,
+        per_page: int = 50,
+    ) -> list[dict]:
+        """Entries in a window. Both bounds are required by the API."""
+        page = await self.request(
+            "GET",
+            "/time-entries",
+            params={
+                "date_from": to_rfc3339(date_from),
+                "date_to": to_rfc3339(date_to),
+                "per_page": per_page,
+                "include_taskless": "true",
+            },
+        )
+        return (page or {}).get("data", [])
+
+    async def resolve_workspace_id(self) -> str:
+        """Look up the default workspace when none is configured."""
+        response = await self._http.get(
+            f"{self._config.api_base}/users/me/settings",
+            headers={"Authorization": f"Bearer {self._config.api_key}"},
+        )
+        settings = self._handle(response) or {}
+        return str(settings["current_workspace_id"])
 
     def _handle(self, response: httpx.Response) -> Any | None:
         if response.status_code == 204:
