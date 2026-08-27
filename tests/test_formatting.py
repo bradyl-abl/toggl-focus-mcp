@@ -74,3 +74,44 @@ def test_stopped_timer_when_nothing_ran():
 
 def test_stopped_timer_reports_duration():
     assert "30m 0s" in format_stopped_timer({"description": "writing", "duration": 1800})
+
+
+def test_planned_duration_zero_preferred_over_tracked():
+    """Entry with planned_duration: 0 should render 0s, not fall back to duration."""
+    entry = {
+        "description": "scheduled",
+        "planned_duration": 0,
+        "duration": 1800,
+        "planned_start": "2026-08-26T17:00:00Z",
+    }
+    result = format_time_entries([entry])
+    assert "0s" in result
+    assert "30m 0s" not in result
+
+
+def test_fallback_to_tracked_fields_when_planned_absent():
+    """Entry with only duration and start (no planned fields) should fall back correctly."""
+    entry = {
+        "description": "tracked",
+        "duration": 1800,
+        "start": "2026-08-26T17:00:00Z",
+    }
+    result = format_time_entries([entry])
+    assert "30m 0s" in result
+    assert "2026-08-26" in result
+
+
+def test_time_entries_singular_plural():
+    """Single entry renders '1 time entry', multiple render 'N time entries'."""
+    single = [{"description": "a", "planned_start": "2026-08-26T17:00:00Z", "planned_duration": 1800}]
+    result_single = format_time_entries(single)
+    assert "1 time entry" in result_single
+    assert "1 time entries" not in result_single
+
+    multiple = [
+        {"description": "a", "planned_start": "2026-08-26T17:00:00Z", "planned_duration": 1800},
+        {"description": "b", "planned_start": "2026-08-26T18:00:00Z", "planned_duration": 1800},
+    ]
+    result_multiple = format_time_entries(multiple)
+    assert "2 time entries" in result_multiple
+    assert "2 time entry" not in result_multiple

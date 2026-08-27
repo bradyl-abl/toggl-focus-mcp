@@ -38,7 +38,9 @@ def format_current_timer(entry: dict | None, now: datetime) -> str:
 def format_stopped_timer(entry: dict | None) -> str:
     if entry is None:
         return "No timer was running."
-    duration = entry.get("duration") or 0
+    duration = entry.get("duration")
+    if duration is None:
+        duration = 0
     return f"Stopped: {_describe(entry)}\nDuration: {format_duration(duration)}"
 
 
@@ -49,11 +51,18 @@ def format_time_entries(entries: list[dict]) -> str:
     lines = []
     total = 0
     for entry in entries:
-        seconds = entry.get("planned_duration") or entry.get("duration") or 0
+        seconds = entry.get("planned_duration")
+        if seconds is None:
+            seconds = entry.get("duration")
+        if seconds is None:
+            seconds = 0
         total += seconds
-        start = entry.get("planned_start") or entry.get("start")
+        start = entry.get("planned_start")
+        if start is None:
+            start = entry.get("start")
         day = _parse(start).astimezone(timezone.utc).strftime("%Y-%m-%d") if start else "unknown"
         lines.append(f"  {day}  {format_duration(seconds):>8}  {_describe(entry)}")
 
-    header = f"{len(entries)} time entries"
+    count = len(entries)
+    header = f"{count} time entry" if count == 1 else f"{count} time entries"
     return f"{header}\n" + "\n".join(lines) + f"\n\nTotal: {format_duration(total)}"
