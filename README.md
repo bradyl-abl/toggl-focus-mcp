@@ -88,17 +88,56 @@ org ID:
 ## Tools
 
 - **`get_current_timer()`** - returns the running timer, or a message saying
-  none is running.
+  none is running. Shows the client and project it is filed against, and its
+  tags, when it has them.
 - **`start_timer(description, project_id=None)`** - starts a timer with the
   given description. If a timer is already running, the API stops it first.
   `project_id` is Toggl's numeric project ID. v1 ships no tool for listing
   projects, so you have to supply the number yourself.
 - **`stop_current_timer()`** - stops the running timer. Reports plainly when
   nothing was running.
-- **`get_time_entries(days=7)`** - lists time entries from a rolling window of
-  the last N times 24 hours, counting back from now. These are not calendar
-  days: `days=1` is the last 24 hours, not today. Durations shown are planned
-  durations.
+- **`get_time_entries(days=7, date_from=None, date_to=None, include_planned=False)`**
+  - lists time entries. Two ways to pick the period:
+  - `days` is a rolling window of the last N times 24 hours, counting back from
+    now. These are not calendar days: `days=1` is the last 24 hours, not today.
+  - `date_from` and `date_to` are calendar dates as `YYYY-MM-DD`, in UTC, with
+    both ends included. Pass them together, both or neither. They override
+    `days`. One day is the same date in both.
+
+  Each line reads `date  duration  [client / project]  description  #tags`.
+  The bracket is dropped for an entry with no project, and falls back to
+  `[project <id>]` if the project names cannot be read.
+
+  By default only genuinely **tracked** time is returned. See below.
+
+### Tracked time versus planned calendar blocks
+
+`GET /time-entries` returns two different kinds of record from one endpoint:
+
+| | Tracked entry | Planned calendar block |
+|---|---|---|
+| What it is | time the user really spent | a meeting mirrored from a connected calendar |
+| `duration` | a measured value | `null` |
+| `calendar_event_id` | absent | set |
+| Shown by default | yes | no |
+
+If you connect a calendar to Toggl, every meeting becomes a row here. They were
+never tracked and may never have happened: a cancelled meeting still arrives,
+with the cancellation only in the description text. On a calendar-heavy account
+they outnumber real entries by a wide margin, so counting them as worked time
+overstates hours badly.
+
+`get_time_entries` therefore returns only tracked time by default and reports
+how many planned blocks it left out. Pass `include_planned=true` to list them,
+and they appear in their own section under a separate `Total planned`. The two
+totals are never added together. An account with no calendar connected has no
+planned blocks and sees no difference.
+
+Project and client names cost extra calls. `get_time_entries` and
+`get_current_timer` read `/projects`, and `/clients` on top of that when a
+project carries a `client_id` rather than the name itself. Both are skipped
+when no entry has a project, and a failure there drops the names rather than
+the entries.
 
 Errors from the API come back with the status code and a readable message,
 including the hint about Toggl revoking your previous key when you create a

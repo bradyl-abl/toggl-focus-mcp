@@ -278,3 +278,111 @@ async def test_workspace_is_resolved_only_once():
         await client.request("GET", "/tracking/current")
         await client.request("GET", "/tracking/current")
     assert settings.call_count == 1
+
+
+def projects_page(*projects):
+    return httpx.Response(200, json={"page": 1, "per_page": 50, "data": list(projects)})
+
+
+@respx.mock
+async def test_project_lookup_maps_ids_to_names():
+    respx.get(f"{SCOPE}/projects").mock(
+        return_value=projects_page({"id": 1605053, "name": "Website Rebuild"})
+    )
+    async with httpx.AsyncClient() as http:
+        lookup = await make_client(http).project_lookup()
+    assert lookup.project_names == {"1605053": "Website Rebuild"}
+    assert lookup.client_names == {}
+
+
+@respx.mock
+async def test_project_lookup_resolves_client_names_by_id():
+    respx.get(f"{SCOPE}/projects").mock(
+        return_value=projects_page(
+            {"id": 1605053, "name": "Website Rebuild", "client_id": 900}
+        )
+    )
+    clients = respx.get(f"{SCOPE}/clients").mock(
+        return_value=httpx.Response(
+            200, json={"page": 1, "per_page": 50, "data": [{"id": 900, "name": "Acme Corp"}]}
+        )
+    )
+    async with httpx.AsyncClient() as http:
+        lookup = await make_client(http).project_lookup()
+    assert lookup.client_names == {"1605053": "Acme Corp"}
+    assert clients.called
+
+
+@respx.mock
+async def test_project_lookup_skips_the_clients_call_when_no_project_has_one():
+    respx.get(f"{SCOPE}/projects").mock(
+        return_value=projects_page({"id": 1605053, "name": "Website Rebuild"})
+    )
+    clients = respx.get(f"{SCOPE}/clients")
+    async with httpx.AsyncClient() as http:
+        await make_client(http).project_lookup()
+    assert not clients.called
+
+
+@respx.mock
+async def test_project_lookup_prefers_a_client_name_carried_on_the_project():
+    respx.get(f"{SCOPE}/projects").mock(
+        return_value=projects_page(
+            {"id": 1, "name": "A", "client_id": 900, "client_name": "Acme Corp"},
+            {"id": 2, "name": "B", "client": {"id": 901, "name": "Globex"}},
+        )
+    )
+    clients = respx.get(f"{SCOPE}/clients")
+    async with httpx.AsyncClient() as http:
+        lookup = await make_client(http).project_lookup()
+    assert lookup.client_names == {"1": "Acme Corp", "2": "Globex"}
+    assert not clients.called
+
+
+@respx.mock
+async def test_project_lookup_survives_a_clients_endpoint_that_is_not_there():
+    """No client names is a worse label, not a failed listing."""
+    respx.get(f"{SCOPE}/projects").mock(
+        return_value=projects_page({"id": 1605053, "name": "Website Rebuild", "client_id": 900})
+    )
+    respx.get(f"{SCOPE}/clients").mock(return_value=httpx.Response(404, json={"error": "nope"}))
+    async with httpx.AsyncClient() as http:
+        lookup = await make_client(http).project_lookup()
+    assert lookup.project_names == {"1605053": "Website Rebuild"}
+    assert lookup.client_names == {}
+
+
+@respx.mock
+async def test_project_lookup_still_raises_on_a_real_clients_failure():
+    respx.get(f"{SCOPE}/projects").mock(
+        return_value=projects_page({"id": 1605053, "name": "Website Rebuild", "client_id": 900})
+    )
+    respx.get(f"{SCOPE}/clients").mock(return_value=httpx.Response(500, json={"error": "boom"}))
+    async with httpx.AsyncClient() as http:
+        with pytest.raises(FocusAPIError):
+            await make_client(http).project_lookup()
+
+
+@respx.mock
+async def test_project_lookup_reads_a_bare_array_response():
+    """Not every collection endpoint pages. An array is the whole set."""
+    respx.get(f"{SCOPE}/projects").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "name": "Solo"}])
+    )
+    async with httpx.AsyncClient() as http:
+        lookup = await make_client(http).project_lookup()
+    assert lookup.project_names == {"7": "Solo"}
+
+
+@respx.mock
+async def test_project_lookup_walks_every_page():
+    pages = [
+        httpx.Response(200, json={"page": 1, "per_page": 50,
+                                  "data": [{"id": i, "name": f"P{i}"} for i in range(50)]}),
+        httpx.Response(200, json={"page": 2, "per_page": 50, "data": [{"id": 50, "name": "P50"}]}),
+    ]
+    route = respx.get(f"{SCOPE}/projects").mock(side_effect=pages)
+    async with httpx.AsyncClient() as http:
+        lookup = await make_client(http).project_lookup()
+    assert route.call_count == 2
+    assert lookup.project_names["50"] == "P50"

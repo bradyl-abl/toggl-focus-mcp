@@ -33,6 +33,20 @@ class TimeEntryResult(NamedTuple):
     truncated: bool
 
 
+class ProjectLookup(NamedTuple):
+    """Names for the projects that time entries point at.
+
+    Both dicts are keyed by project ID rendered as a string, because the API
+    returns IDs as numbers in some payloads and as strings in others.
+    """
+
+    project_names: dict[str, str]
+    client_names: dict[str, str]
+
+
+EMPTY_LOOKUP = ProjectLookup({}, {})
+
+
 class FocusAPIError(Exception):
     """Raised when the Focus API returns an error status."""
 
@@ -51,6 +65,27 @@ def to_rfc3339(value: datetime) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _as_id(value: Any) -> str | None:
+    """Normalise an ID to a string key, or None when there is nothing to key on."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _embedded_client_name(project: dict) -> str:
+    """The client name carried on the project itself, when the API sends one."""
+    name = project.get("client_name")
+    if name:
+        return str(name)
+    client = project.get("client")
+    if isinstance(client, dict) and client.get("name"):
+        return str(client["name"])
+    if isinstance(client, str) and client.strip():
+        return client.strip()
+    return ""
 
 
 class FocusClient:
@@ -116,32 +151,107 @@ class FocusClient:
         date_to: datetime,
         per_page: int = 50,
     ) -> TimeEntryResult:
-        """Every entry in a window. Both bounds are required by the API.
+        """Every entry in a window. Both bounds are required by the API."""
+        entries, truncated = await self._paged(
+            "/time-entries",
+            {
+                "date_from": to_rfc3339(date_from),
+                "date_to": to_rfc3339(date_to),
+                "include_taskless": "true",
+            },
+            per_page,
+        )
+        return TimeEntryResult(entries, truncated)
 
-        Walks pages until one comes back short, so a busy month does not get
-        silently cut to the first page. Gives up at MAX_PAGES and flags the
-        result as truncated, so the caller can say the list is incomplete
-        rather than presenting a partial total as the whole period.
+    async def project_lookup(self) -> ProjectLookup:
+        """Map project IDs to their project name and client name.
+
+        Time entries carry only project_id, so the names take a second call.
+        Clients are one hop further out: a project carries client_id, not the
+        client name, unless the payload happens to embed it.
+        """
+        projects, _ = await self._paged("/projects", {})
+        project_names: dict[str, str] = {}
+        client_names: dict[str, str] = {}
+        unresolved: dict[str, str] = {}
+
+        for project in projects:
+            if not isinstance(project, dict):
+                continue
+            project_id = _as_id(project.get("id"))
+            if project_id is None:
+                continue
+            name = project.get("name")
+            if name:
+                project_names[project_id] = str(name)
+            embedded = _embedded_client_name(project)
+            if embedded:
+                client_names[project_id] = embedded
+                continue
+            client_id = _as_id(project.get("client_id"))
+            if client_id is not None:
+                unresolved[project_id] = client_id
+
+        if unresolved:
+            by_client_id = await self._client_names()
+            for project_id, client_id in unresolved.items():
+                name = by_client_id.get(client_id)
+                if name:
+                    client_names[project_id] = name
+
+        return ProjectLookup(project_names, client_names)
+
+    async def _client_names(self) -> dict[str, str]:
+        """Client ID to client name.
+
+        A 403 or 404 here means this account cannot read clients, or the route
+        is not there. Names are a label, not the answer, so return nothing and
+        let the caller print the project on its own.
+        """
+        try:
+            clients, _ = await self._paged("/clients", {})
+        except FocusAPIError as error:
+            if error.status in (403, 404):
+                return {}
+            raise
+        names: dict[str, str] = {}
+        for record in clients:
+            if not isinstance(record, dict):
+                continue
+            client_id = _as_id(record.get("id"))
+            name = record.get("name")
+            if client_id is not None and name:
+                names[client_id] = str(name)
+        return names
+
+    async def _paged(
+        self,
+        path: str,
+        params: dict,
+        per_page: int = 50,
+    ) -> tuple[list[dict], bool]:
+        """Walk a paged collection until a page comes back short.
+
+        Stops at MAX_PAGES and reports truncation, so a busy month is never
+        silently cut to the first page and never loops forever either. An
+        endpoint that answers with a bare array does not page at all, so that
+        array is the whole set.
         """
         per_page = max(1, per_page)
-        entries: list[dict] = []
+        items: list[dict] = []
         for page_number in range(1, MAX_PAGES + 1):
-            page = await self.request(
+            payload = await self.request(
                 "GET",
-                "/time-entries",
-                params={
-                    "date_from": to_rfc3339(date_from),
-                    "date_to": to_rfc3339(date_to),
-                    "page": page_number,
-                    "per_page": per_page,
-                    "include_taskless": "true",
-                },
+                path,
+                params={**params, "page": page_number, "per_page": per_page},
             )
-            batch = (page or {}).get("data") or []
-            entries.extend(batch)
+            if isinstance(payload, list):
+                return payload, False
+            batch = (payload or {}).get("data") or []
+            items.extend(batch)
             if len(batch) < per_page:
-                return TimeEntryResult(entries, False)
-        return TimeEntryResult(entries, True)
+                return items, False
+        return items, True
 
     async def resolve_workspace_id(self) -> str:
         """Look up the default workspace when none is configured."""
