@@ -12,3 +12,6 @@ build/
 
 # Local session notes, not for the public repo
 SESSION-STATE.local.md
+
+# Local timecard state, not for the public repo
+.claude/timecard/
